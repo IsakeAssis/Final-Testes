@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import streamlit as st
 from datetime import datetime
 import warnings
+import random  # <--- ADICIONADO
+
 warnings.filterwarnings("ignore", message=".*missing ScriptRunContext.*")
 
 # ====================================================== rodar no cmd streamlit run crud.py
@@ -205,13 +207,16 @@ elif aba == "💸 Realizar Transação":
         destino_id = st.selectbox("Conta de destino", contas_df["id_conta"])
 
     valor = st.number_input("Valor da transação (R$)", min_value=0.01, step=0.01)
-    canal = st.selectbox("Canal", ["App", "Internet Banking", "ATM", "Outros"])
-    local = st.text_input("Local de origem", "Online")
+    
+    # --- CAMPOS REMOVIDOS ---
+    # canal = st.selectbox("Canal", ["App", "Internet Banking", "ATM", "Outros"])
+    # local = st.text_input("Local de origem", "Online")
 
     if st.button("🚀 Executar Transação"):
         if origem_id == destino_id:
             st.error("A conta de origem e destino não podem ser iguais.")
         else:
+            # Busca os dicionários completos das contas
             conta_origem = next(c for c in dados["contas_bancarias"] if c["id_conta"] == origem_id)
             conta_destino = next(c for c in dados["contas_bancarias"] if c["id_conta"] == destino_id)
 
@@ -222,18 +227,49 @@ elif aba == "💸 Realizar Transação":
                 conta_origem["saldo_inicial"] -= valor
                 conta_destino["saldo_inicial"] += valor
 
-                # Cria registro de transação
-                nova_transacao = {
-                    "id_conta": origem_id,
-                    "id_destino": destino_id,
-                    "data_operacao": datetime.now().isoformat(),
-                    "valor": valor,
-                    "canal": canal,
-                    "local_origem": local,
-                    "flag_suspeita": False,
-                    "id_conta_origem": origem_id
+                # --- Listas para Sorteio (do TesteDOGPT.py) ---
+                CANAIS = ["mobile", "internet banking"]
+                DESCRICOES_PIX = [
+                    "Pagamento de serviço", "Transferência entre contas", "Aluguel",
+                    "Pagamento de compra", "Empréstimo", "Repasse familiar",
+                    "Pix para amigo", "Pix mercado"
+                ]
+                STATUS_TRANSACAO = ["concluida", "processando", "falha"]
+                STATUS_WEIGHTS = [0.95, 0.03, 0.02] # usa os pesos para simular a frequência esperada de sucesso e falha
+                
+                # --- Sorteios ---
+                canal_sorteado = random.choice(CANAIS)
+                descricao_sorteada = random.choice(DESCRICOES_PIX)
+                status_sorteado = random.choices(STATUS_TRANSACAO, weights=STATUS_WEIGHTS, k=1)[0]
 
+                # --- Criação do registro de transação (FORMATO COMPLETO) ---
+                nova_transacao = {
+                    # IDs e Valor
+                    "id_conta": origem_id,
+                    "id_conta_origem": origem_id,
+                    "id_conta_destino": destino_id,
+                    "valor": valor,
+                    
+                    # Data (agora) e Local (puxado da conta de origem)
+                    "data_operacao": datetime.now().isoformat(),
+                    "local_origem": conta_origem.get("localizacao", "Local Desconhecido"),
+                    
+                    # Campos Sorteados
+                    "tipo_operacao": "PIX",
+                    "tipo_transacao": "envio", 
+                    "canal": canal_sorteado,
+                    "descricao_pagamento": descricao_sorteada,
+                    "status_transacao": status_sorteado,
+                    
+                    # Campos Puxados da conta de destino
+                    "chave_pix_destino": conta_destino.get("chave_pix", "N/A"),
+                    "tipo_chave_pix_destino": conta_destino.get("tipo_chave_pix", "N/A"),
+                    "instituicao_destino": conta_destino.get("banco", "N/A"),
+                    
+                    # Flag para o ML 
+                    "flag_suspeita": False
                 }
+
 
                 # Grava no JSON
                 dados["historico_pix"].append(nova_transacao)
