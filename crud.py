@@ -199,19 +199,52 @@ elif aba == "💸 Realizar Transação":
     st.header("💸 Nova Transação entre Contas")
 
     col1, col2 = st.columns(2)
+
     with col1:
         origem_id = st.selectbox("Conta de origem", contas_df["id_conta"])
     with col2:
         destino_id = st.selectbox("Conta de destino", contas_df["id_conta"])
 
+    # 🔍 Buscar histórico exclusivo da conta de origem
+    transacoes_origem = [
+        t for t in dados.get("historico_pix", [])
+        if t.get("id_conta_origem") == origem_id
+    ]
+
+    # 🔍 Extrair SOMENTE valores que essa conta já utilizou
+    tipos_transacao_previos = sorted({t.get("tipo_transacao") for t in transacoes_origem if t.get("tipo_transacao")})
+    canais_previos = sorted({t.get("canal") for t in transacoes_origem if t.get("canal")})
+    tipos_operacao_previos = sorted({t.get("tipo_operacao") for t in transacoes_origem if t.get("tipo_operacao")})
+    locais_previos = sorted({t.get("local_origem") for t in transacoes_origem if t.get("local_origem")})
+
+    # 🔽 Selectboxes EXCLUSIVAMENTE com valores do histórico da conta de origem
+    tipo_operacao = st.selectbox(
+        "Tipo de operação (histórico da conta)",
+        tipos_operacao_previos if tipos_operacao_previos else []
+    )
+
+    tipo_transacao = st.selectbox(
+        "Tipo de transação (histórico da conta)",
+        tipos_transacao_previos if tipos_transacao_previos else []
+    )
+
+    canal = st.selectbox(
+        "Canal (histórico da conta)",
+        canais_previos if canais_previos else []
+    )
+
+    local = st.selectbox(
+        "Local de origem (histórico da conta)",
+        locais_previos if locais_previos else []
+    )
+
     valor = st.number_input("Valor da transação (R$)", min_value=0.01, step=0.01)
-    canal = st.selectbox("Canal", ["App", "Internet Banking", "ATM", "Outros"])
-    local = st.text_input("Local de origem", "Online")
 
     if st.button("🚀 Executar Transação"):
         if origem_id == destino_id:
             st.error("A conta de origem e destino não podem ser iguais.")
         else:
+            # Buscar contas completas
             conta_origem = next(c for c in dados["contas_bancarias"] if c["id_conta"] == origem_id)
             conta_destino = next(c for c in dados["contas_bancarias"] if c["id_conta"] == destino_id)
 
@@ -222,20 +255,38 @@ elif aba == "💸 Realizar Transação":
                 conta_origem["saldo_inicial"] -= valor
                 conta_destino["saldo_inicial"] += valor
 
-                # Cria registro de transação
+                # tenta vários nomes possíveis para a instituição na conta de destino
+                instituicao_dest = (
+                    conta_destino.get("instituicao")
+                    or conta_destino.get("instituicao_destino")
+                    or conta_destino.get("banco")
+                    or conta_destino.get("nome_instituicao")
+                    or conta_destino.get("instituicao_bancaria")
+                    or ""
+                )
+
+                # Registro da transação seguindo o formato do JSON, agora com instituicao_destino
                 nova_transacao = {
                     "id_conta": origem_id,
-                    "id_destino": destino_id,
-                    "data_operacao": datetime.now().isoformat(),
+                    "tipo_operacao": tipo_operacao,
                     "valor": valor,
+                    "data_operacao": datetime.now().isoformat(),
+                    "descricao_pagamento": "Transação manual via sistema",
+                    "tipo_transacao": tipo_transacao,
+                    "status_transacao": "concluida",
+                    "id_conta_origem": origem_id,
+                    "id_conta_destino": destino_id,
+
+                    # Puxando informações reais da CONTA DE DESTINO
+                    "chave_pix_destino": conta_destino.get("chave_pix", ""),
+                    "tipo_chave_pix_destino": conta_destino.get("tipo_chave_pix", ""),
+                    "instituicao_destino": instituicao_dest,
+
                     "canal": canal,
                     "local_origem": local,
-                    "flag_suspeita": False,
-                    "id_conta_origem": origem_id
-
+                    "flag_suspeita": False
                 }
 
-                # Grava no JSON
                 dados["historico_pix"].append(nova_transacao)
                 salvar_dados(ARQUIVO_JSON, dados)
 
